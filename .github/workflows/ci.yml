@@ -1,0 +1,77 @@
+name: Benchmark Core CI
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cppcheck valgrind
+
+      - name: Build static library
+        run: make all
+
+      - name: Run static analysis
+        run: make lint
+
+      - name: Run deterministic ST and MT tests
+        run: make test
+
+      - name: Run AddressSanitizer and UndefinedBehaviorSanitizer
+        run: make test_sanitize
+
+      - name: Run Helgrind
+        run: make clean && make test_helgrind
+
+      - name: Create distribution
+        run: make dist
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist
+
+  release:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download distribution artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist
+
+      - name: Pack distribution
+        id: dist
+        run: |
+          ARCHIVE="benchmark-core-${{ github.ref_name }}.tar.gz"
+          tar -C dist -czf "$ARCHIVE" .
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Create release and upload asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "benchmark-core release ${{ github.ref_name }}" \
+            "${{ steps.dist.outputs.archive }}"
