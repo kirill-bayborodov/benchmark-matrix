@@ -1,0 +1,27 @@
+{\ttfamily benchmark-\/core} — доменно-\/независимое C11-\/ядро для воспроизводимых параметризованных benchmark-\/runner-\/ов. Репозиторий может использоваться самостоятельно и подключается потребляющими framework-\/репозиториями как Git submodule.\hypertarget{md_README_autotoc_md1}{}\doxysection{Гарантии ядра}\label{md_README_autotoc_md1}
+Ядро предоставляет общий lifecycle для однопоточного и многопоточного измерения\+: детерминированную генерацию immutable dataset через callback, warm-\/up, {\ttfamily end-\/to-\/end} и {\ttfamily kernel-\/only} boundaries, independent mutable state на каждый вызов, синхронизацию MT worker-\/ов и aggregation checksum. Оно не зависит от bignum, SIMD-\/библиотек или конкретного формата данных.
+
+Успешный run всегда заканчивается строками\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{benchmark=<stable-\/name>\_st|mt ...}
+\DoxyCodeLine{Benchmark finished.}
+
+\end{DoxyCode}
+
+
+Первая строка содержит workload metadata, seed, warmup, data count, fingerprint, checksum, elapsed seconds и nanoseconds per call. Вторая обязана следовать после первой и является единым маркером успешного завершения для внешней автоматизации.\hypertarget{md_README_autotoc_md2}{}\doxysection{Adapter API}\label{md_README_autotoc_md2}
+Клиент передаёт {\ttfamily benchmark\+\_\+adapter\+\_\+t} из {\ttfamily include/benchmark\+\_\+core.\+h}. Он определяет размер одного state record, callbacks {\ttfamily initialize}, {\ttfamily operation}, {\ttfamily checksum}, имя benchmark и код успеха. Workload поля {\ttfamily input\+\_\+kind}, {\ttfamily operation\+\_\+kind}, {\ttfamily size\+\_\+profile} и {\ttfamily capacity\+\_\+profile} передаются adapter-\/у без предметной интерпретации.\hypertarget{md_README_autotoc_md3}{}\doxysection{CLI и ENV}\label{md_README_autotoc_md3}
+ST runner поддерживает {\ttfamily -\/-\/iterations}, а MT runner — {\ttfamily -\/-\/threads} и {\ttfamily -\/-\/total-\/iterations}; последнее значение обязано делиться на число threads. Оба поддерживают {\ttfamily -\/-\/data-\/mode}, {\ttfamily -\/-\/input-\/kind}, {\ttfamily -\/-\/operation-\/kind}, {\ttfamily -\/-\/measure-\/mode}, {\ttfamily -\/-\/size-\/profile}, {\ttfamily -\/-\/capacity-\/profile}, {\ttfamily -\/-\/warmup}, {\ttfamily -\/-\/data-\/count} и {\ttfamily -\/-\/seed}. ENV equivalents используют префикс {\ttfamily BENCH\+\_\+}\+: например, {\ttfamily BENCH\+\_\+\+ITERATIONS}, {\ttfamily BENCH\+\_\+\+MT\+\_\+\+TOTAL\+\_\+\+ITERATIONS}, {\ttfamily BENCH\+\_\+\+OPERATION\+\_\+\+KIND} и {\ttfamily BENCH\+\_\+\+SIZE\+\_\+\+PROFILE}.\hypertarget{md_README_autotoc_md4}{}\doxysection{Проверка}\label{md_README_autotoc_md4}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{make test}
+\DoxyCodeLine{make lint}
+\DoxyCodeLine{make test\_sanitize}
+\DoxyCodeLine{make clean \&\& make test\_helgrind}
+
+\end{DoxyCode}
+
+
+Smoke-\/тест использует byte-\/buffer adapter и проверяет ST, MT, {\ttfamily kernel-\/only}, mixed inputs, operation kinds и near-\/capacity metadata. {\ttfamily test\+\_\+sanitize} запускает Address\+Sanitizer и Undefined\+Behavior\+Sanitizer; {\ttfamily test\+\_\+helgrind} проверяет MT lifecycle на data races. 

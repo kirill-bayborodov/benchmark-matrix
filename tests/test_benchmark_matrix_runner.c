@@ -1,5 +1,5 @@
 /**
- * @file test_cli_runner.c
+ * @file test_benchmark_matrix_runner.c
  * @brief Интеграционные тесты для CLI-интерфейса benchmark_matrix.
  * @details Запускает собранный исполняемый файл ./bench_matrix через system()
  * и проверяет коды возврата (0 - успех/help, 1 - ошибки протокола, 2 - ошибки аргументов/IO).

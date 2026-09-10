@@ -198,11 +198,11 @@ SUBMODULES_HEADERS_RAW := $(foreach dir,$(SUBMODULES_INCLUDE_DIR),$(wildcard $(d
 # Очищаем список всех заголовков от ЛЮБЫХ путей, которые заканчиваются на $(FAMILY_NAME).h
 # Шаблон %$(FAMILY_NAME).h удалит файл, даже если он лежит в другой папке
 SRC_HEADERS_REST := $(filter-out $(FAMILY_HEADER),$(SRC_SUBMODULES_HEADERS_RAW))
-SRC_SUBMODULES_HEADERS := $(filter %.h, $(strip $(FAMILY_HEADER) $(SRC_HEADERS_REST)))
+SRC_SUBMODULES_HEADERS := $(filter %.h, $(strip $(SRC_HEADERS_REST)))
 DIST_HEADERS_REST := $(filter-out $(FAMILY_HEADER),$(DIST_SUBMODULES_HEADERS_RAW))
-DIST_SUBMODULES_HEADERS := $(filter %.h, $(strip $(FAMILY_HEADER) $(DIST_HEADERS_REST)))
+DIST_SUBMODULES_HEADERS := $(filter %.h, $(strip  $(DIST_HEADERS_REST)))
 HEADERS_REST := $(filter-out $(FAMILY_HEADER),$(SUBMODULES_HEADERS_RAW))
-SUBMODULES_HEADERS := $(filter %.h, $(strip $(FAMILY_HEADER) $(HEADERS_REST)))
+SUBMODULES_HEADERS := $(filter %.h, $(strip $(HEADERS_REST)))
 
 # --- Source & Target Files ---
 ASM_SRC := $(SRC_DIR)/$(LIB_NAME).asm
@@ -328,7 +328,7 @@ all: build
 build:  $(OBJ) $(OBJECTS) $(BENCH_CLI_BIN)
 
 # --- Обычный прогон: однократно, без санитайзеров.
-test: $(FAMILY_SYMLINK) $(MOCK_MANIFEST) $(MOCK_BIN) $(BENCH_CLI_BIN) $(ALL_TEST_BINS)
+test: $(MOCK_MANIFEST) $(MOCK_BIN) $(BENCH_CLI_BIN) $(ALL_TEST_BINS)
 	@echo "=== Running unit tests (CONFIG=$(CONFIG), SAN=$(SAN_LABEL)) ==="
 	@total=0; fail=0; \
 	for t in $(ALL_TEST_BINS); do \
@@ -350,7 +350,7 @@ test: $(FAMILY_SYMLINK) $(MOCK_MANIFEST) $(MOCK_BIN) $(BENCH_CLI_BIN) $(ALL_TEST
 # Использование:
 #   make test_sanitize SAN=address
 #   make test_sanitize SAN=undefined CONFIG=debug
-test_sanitize: $(FAMILY_SYMLINK) $(ALL_TEST_BINS)
+test_sanitize: $(ALL_TEST_BINS)
 	@echo "=== Running tests under $(SAN_LABEL) (CONFIG=$(CONFIG)) ==="
 	@total=0; fail=0; san_fail=0; \
 	for t in $(ALL_TEST_BINS); do \
@@ -383,7 +383,7 @@ test_sanitize: $(FAMILY_SYMLINK) $(ALL_TEST_BINS)
 #   make test_helgrind
 # Требования: valgrind (apt install valgrind).
 test_helgrind: CFLAGS := $(HELGRIND_CFLAGS)
-test_helgrind: $(FAMILY_SYMLINK) $(TEST_BINS)
+test_helgrind: $(TEST_BINS)
 	@echo "=== Running MT tests under Helgrind (CONFIG=$(CONFIG)) ==="
 	@total=0; fail=0; \
 	mt_binaries="$(patsubst $(TESTS_DIR)/%.c,$(BIN_DIR)/%,$(TEST_BINS_MT))"; \
@@ -410,12 +410,12 @@ test_helgrind: $(FAMILY_SYMLINK) $(TEST_BINS)
 
 # rev.12: clean убран из зависимостей; ST и MT — отдельные таргеты;
 # MT бенмарк собирается с -pthread.
-bench: $(FAMILY_SYMLINK) $(REPORTS_DIR) bench_st bench_mt
+bench: $(REPORTS_DIR) bench_st bench_mt
 	@echo ""
 	@echo "Both bench reports written to $(REPORTS_DIR)/"
 	@ls -l $(REPORTS_DIR)/$(REPORT_NAME)_*.txt
 
-bench_st: $(FAMILY_SYMLINK) $(BENCH_BIN_ST)
+bench_st: $(BENCH_BIN_ST)
 	@echo "=== ST benchmark for report: $(REPORT_NAME) (CONFIG=$(CONFIG)) ==="
 	@$(MKDIR) $(REPORTS_DIR)
 	@sudo sysctl -w kernel.perf_event_max_sample_rate=10000 > /dev/null
@@ -428,7 +428,7 @@ bench_st: $(FAMILY_SYMLINK) $(BENCH_BIN_ST)
 	@if [ "$(KEEP_PERF)" = "0" ]; then $(RM) $(PERF_DATA_ST); else echo "ST raw perf: $(PERF_DATA_ST)"; fi
 	@echo "ST report: $(REPORT_FILE_ST)"
 
-bench_mt: $(FAMILY_SYMLINK) $(BENCH_BIN_MT)
+bench_mt: $(BENCH_BIN_MT)
 	@echo "=== MT benchmark for report: $(REPORT_NAME) (CONFIG=$(CONFIG)) ==="
 	@$(MKDIR) $(REPORTS_DIR)
 	@sudo sysctl -w kernel.perf_event_max_sample_rate=20000 > /dev/null
@@ -443,7 +443,7 @@ bench_mt: $(FAMILY_SYMLINK) $(BENCH_BIN_MT)
 
 # Повторяем perf stat для сравнительных исследований.
 # Пример: make bench_stat CONFIG=release REPORT_NAME=baseline PERF_RUNS=7 DATA_MODE=all_nonzero
-bench_full: $(FAMILY_SYMLINK) $(REPORTS_DIR)
+bench_full: $(REPORTS_DIR)
 	@set -e; for mode in all_zero all_nonzero mixed; do \
 	        report_name="$(REPORT_NAME)_$${mode}"; \
 	        echo "=== Full benchmark mode: $${mode}, report=$${report_name} ==="; \
@@ -455,7 +455,7 @@ bench_full: $(FAMILY_SYMLINK) $(REPORTS_DIR)
 # The regular system perf is not compatible with the cloud kernel, so the
 # kernel-matched binary configured by PERF is required. No symlink is created.
 bench_cl: PERF_EVENTS := task-clock,context-switches,cpu-migrations,page-faults
-bench_cl: $(FAMILY_SYMLINK) $(REPORTS_DIR)
+bench_cl: $(REPORTS_DIR)
 	@echo "=== Cloud benchmark (CONFIG=$(CONFIG), RUNS=$(PERF_RUNS)) ==="
 	@if [ ! -x "$(PERF)" ]; then \
 	echo "INFO: compatible perf is missing at $(PERF); standard perf cannot be used for this cloud kernel."; \
@@ -479,7 +479,7 @@ bench_cl: $(FAMILY_SYMLINK) $(REPORTS_DIR)
 # It writes raw JSON samples and a statistical summary; BENCH_BASELINE enables
 # an explicit regression gate against a reviewed reference artifact.
 bench_matrix: CONFIG := release
-bench_matrix: $(FAMILY_SYMLINK) $(BENCH_BINS) $(BENCHMARK_CORE_LIB) $(BENCH_MATRIX_TOOL) $(BENCH_STATS_TOOL) | $(REPORTS_DIR)
+bench_matrix: $(BENCH_BINS) $(BENCHMARK_CORE_LIB) $(BENCH_MATRIX_TOOL) $(BENCH_STATS_TOOL) | $(REPORTS_DIR)
 	@echo "=== Parameterized C11 benchmark matrix (CONFIG=$(CONFIG), RUNS=$(BENCH_MATRIX_REPETITIONS)) ==="
 	@test -x "$(BENCH_MATRIX_TOOL)" || { echo "ERROR: missing C11 matrix tool: $(BENCH_MATRIX_TOOL)"; exit 1; }
 	@test -x "$(BENCH_STATS_TOOL)" || { echo "ERROR: missing C11 statistics tool: $(BENCH_STATS_TOOL)"; exit 1; }
@@ -509,7 +509,7 @@ bench_stat: bench_stat_st bench_stat_mt
 	@echo "ST stat: $(STAT_FILE_ST)"
 	@echo "MT stat: $(STAT_FILE_MT)"
 
-bench_stat_st: $(FAMILY_SYMLINK) $(BENCH_BIN_ST)
+bench_stat_st: $(BENCH_BIN_ST)
 	@echo "=== ST perf stat: $(REPORT_NAME) (CONFIG=$(CONFIG), RUNS=$(PERF_RUNS)) ==="
 	@$(MKDIR) $(REPORTS_DIR)
 	@printf 'CONFIG=$(CONFIG) DATA_MODE=$(DATA_MODE) PERF_RUNS=$(PERF_RUNS) PERF_EVENTS=$(PERF_EVENTS) CPU_LIST=0\n' > $(STAT_RUNTIME_ST)
@@ -518,7 +518,7 @@ bench_stat_st: $(FAMILY_SYMLINK) $(BENCH_BIN_ST)
 	@grep -q "data_mode=$(DATA_MODE)" $(STAT_RUNTIME_ST) || { echo "ERROR: ST perf stat data mode mismatch; see $(STAT_RUNTIME_ST)"; exit 1; }
 	@grep -q 'elapsed_seconds=' $(STAT_RUNTIME_ST) || { echo "ERROR: ST perf stat runtime output is incomplete; see $(STAT_RUNTIME_ST)"; exit 1; }
 
-bench_stat_mt: $(FAMILY_SYMLINK) $(BENCH_BIN_MT)
+bench_stat_mt: $(BENCH_BIN_MT)
 	@echo "=== MT perf stat: $(REPORT_NAME) (CONFIG=$(CONFIG), RUNS=$(PERF_RUNS)) ==="
 	@$(MKDIR) $(REPORTS_DIR)
 	@printf 'CONFIG=$(CONFIG) DATA_MODE=$(DATA_MODE) PERF_RUNS=$(PERF_RUNS) PERF_EVENTS=$(PERF_EVENTS) MT_THREADS=$(MT_THREADS) MT_CPU_LIST=$(MT_CPU_LIST) MT_TOTAL_ITERATIONS=$(MT_TOTAL_ITERATIONS)\n' > $(STAT_RUNTIME_MT)
@@ -527,33 +527,34 @@ bench_stat_mt: $(FAMILY_SYMLINK) $(BENCH_BIN_MT)
 	@grep -q "data_mode=$(DATA_MODE)" $(STAT_RUNTIME_MT) || { echo "ERROR: MT perf stat data mode mismatch; see $(STAT_RUNTIME_MT)"; exit 1; }
 	@grep -q 'elapsed_seconds=' $(STAT_RUNTIME_MT) || { echo "ERROR: MT perf stat runtime output is incomplete; see $(STAT_RUNTIME_MT)"; exit 1; }
 
-install: clean $(FAMILY_SYMLINK) $(OBJ) $(OBJECTS) $(MOCK_MANIFEST) $(MOCK_BIN) | $(DIST_INCLUDE_DIR) $(DIST_LIB_DIR)
+install: clean build $(MOCK_MANIFEST) $(MOCK_BIN) | $(DIST_INCLUDE_DIR) $(DIST_LIB_DIR)
 	@printf "%s" "Installing product to $(DIST_DIR)/ (CONFIG=$(CONFIG))..."
-	@if [ -f "$(INCLUDE_DIR)/$(FAMILY_NAME).h" ]; then \
+#	@if [ -f "$(INCLUDE_DIR)/$(FAMILY_NAME).h" ]; then \
 	        cp "$(INCLUDE_DIR)/$(FAMILY_NAME).h" "$(DIST_INCLUDE_DIR)/"; \
 	fi
-	@if [ ! -f "$(DIST_INCLUDE_DIR)/$(FAMILY_NAME).h" ]; then \
+#	@if [ ! -f "$(DIST_INCLUDE_DIR)/$(FAMILY_NAME).h" ]; then \
 	        cp "$(FAMILY_HEADER)" "$(DIST_INCLUDE_DIR)/$(FAMILY_NAME).h"; \
 	fi
-	@cp $(HEADER) $(SRC_SUBMODULES_HEADERS) $(DIST_INCLUDE_DIR)/
+	@cp $(HEADER) $(DIST_SUBMODULES_HEADERS) $(DIST_INCLUDE_DIR)/
 	@cp $(OBJ) $(OBJECTS) $(DIST_LIB_DIR)/
-#       @$(foreach d,$(DIST_SUBMODULES), \
+	@$(foreach d,$(DIST_SUBMODULES), \
 	        cd $(DIST_LIB_DIR) && $(AR) x ../../$(LIBS_DIR)/$(d)/dist/lib$(subst -,_,$(d)).a && cd ../..; \
 	)
 	@echo "Ok"
-	@tree $(DIST_DIR)/
+	@cp $(BENCH_CLI_BIN) $(DIST_DIR)/
 	@cp $(TESTS_DIR)/test_$(LIB_NAME)_runner.c $(DIST_DIR)/
 	@$(CC) $(DIST_DIR)/test_$(LIB_NAME)_runner.c  $(DIST_DIR)/$(LIBS_DIR)/*.o -I$(DIST_DIR)/$(INCLUDE_DIR) -o $(DIST_DIR)/test_$(LIB_NAME)_runner -no-pie
 	@$(DIST_DIR)/test_$(LIB_NAME)_runner
 	@$(RM) $(DIST_DIR)/test_$(LIB_NAME)_runner
+	@tree $(DIST_DIR)/
 
-generate-header: $(FAMILY_SYMLINK)
+generate-header:
 	@$(MKDIR) $(DIST_DIR)
 	@printf "%s" "Generating single-file header..."
 	@echo "#ifndef $(UPPER_LIB_NAME)_SINGLE_H" > $(SINGLE_HEADER)
 	@echo "#define $(UPPER_LIB_NAME)_SINGLE_H" >> $(SINGLE_HEADER)
 	@echo "" >> $(SINGLE_HEADER)
-	@if [ -n "$(strip $(SRC_SUBMODULES_HEADERS))" ]; then \
+#	@if [ -n "$(strip $(SRC_SUBMODULES_HEADERS))" ]; then \
 	        sed -e '/#include "$(FAMILY_NAME).h"/d' -e '/#include <$(FAMILY_NAME).h>/d' $(SRC_SUBMODULES_HEADERS) >> $(SINGLE_HEADER); \
 	else \
 	        echo "\n\tSRC-Submodules is empty. Use family header"; \
@@ -618,7 +619,7 @@ generate-header: $(FAMILY_SYMLINK)
 	@echo "Done. Result saved to $(SINGLE_HEADER)"
 	@echo "Ok"
 
-dist: clean $(FAMILY_SYMLINK) $(MOCK_MANIFEST) $(MOCK_BIN)
+dist: clean $(MOCK_MANIFEST) $(MOCK_BIN)
 	@echo "Creating single-file header distribution in $(DIST_DIR)/ (CONFIG=$(CONFIG))...."
 	@$(MKDIR) $(DIST_DIR)
 	@$(MAKE) -s build CONFIG=release
@@ -641,6 +642,7 @@ dist: clean $(FAMILY_SYMLINK) $(MOCK_MANIFEST) $(MOCK_BIN)
 	@$(MAKE) -s generate-header
 	@cp README.md $(DIST_DIR)/
 	@cp LICENSE $(DIST_DIR)/
+	@cp $(BENCH_CLI_BIN) $(DIST_DIR)/
 	@cp $(TESTS_DIR)/test_$(LIB_NAME)_runner.c $(DIST_DIR)/
 	@$(CC) $(DIST_DIR)/test_$(LIB_NAME)_runner.c -L$(DIST_DIR) -l$(LIB_NAME) -o $(DIST_DIR)/test_$(LIB_NAME)_runner -no-pie
 	@$(DIST_DIR)/test_$(LIB_NAME)_runner
@@ -731,20 +733,6 @@ $(BENCH_ADAPTER_TEST_BIN): $(BENCH_ADAPTER_TEST_SOURCE) $(BENCH_ADAPTER_OBJ) $(B
 $(BIN_DIR) $(REPORTS_DIR) $(DIST_INCLUDE_DIR) $(DIST_LIB_DIR):
 	@$(MKDIR) $@
 
-# The symlink is a normal file target; if it already exists and points to
-# the correct source make will consider it up‑to‑date.
-$(FAMILY_SYMLINK): $(FAMILY_HEADER)
-	@echo "Creating symlink: $@ → $(notdir $<)"
-	@ln -sf $(notdir $<) $@
-
-# Удаляем только если это действительно симлинк
-unlink-symlink:
-	@if [ -L "$(FAMILY_PATH)/$(FAMILY_NAME).h" ]; then \
-	        echo "Cleaning up symlink $(FAMILY_PATH)/$(FAMILY_NAME).h"; \
-	        rm -f "$(FAMILY_PATH)/$(FAMILY_NAME).h"; \
-	else \
-	        echo "$(FAMILY_PATH)/$(FAMILY_NAME).h is not symlink. Leave untuched..."; \
-	fi
 
 lint:
 	@echo "Running static analysis on C source files..."
