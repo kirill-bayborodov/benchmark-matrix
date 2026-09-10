@@ -1,27 +1,36 @@
-# benchmark-core
+# benchmark-matrix
 
-`benchmark-core` — доменно-независимое C11-ядро для воспроизводимых параметризованных benchmark-runner-ов. Репозиторий может использоваться самостоятельно и подключается потребляющими framework-репозиториями как Git submodule.
+`benchmark-matrix` — C11-executor для запуска declared benchmark-матрицы и записи raw JSON артефактов. Репозиторий является модулем библиотеки `benchmark-framework` и отвечает за оркестрацию, изоляцию процессов и сбор метрик.
 
-## Гарантии ядра
+## Гарантии executor-а
 
-Ядро предоставляет общий lifecycle для однопоточного и многопоточного измерения: детерминированную генерацию immutable dataset через callback, warm-up, `end-to-end` и `kernel-only` boundaries, independent mutable state на каждый вызов, синхронизацию MT worker-ов и aggregation checksum. Оно не зависит от bignum, SIMD-библиотек или конкретного формата данных.
+Утилита обеспечивает изолированный запуск каждого workload-профиля. Каждый прогон (ST и MT) выполняется в чистом дочернем процессе (через `fork` и `exec`), что полностью исключает влияние разделяемого состояния между итерациями. 
 
-Успешный run всегда заканчивается строками:
+Ядро матрицы гарантирует:
+* **Изоляцию и безопасность**: перехват `stdout`/`stderr` (до 1 МБ на процесс) и защиту от зависаний через wall-clock timeout с принудительным завершением (`SIGKILL`).
+* **Валидацию протокола**: строгую проверку маркеров завершения `benchmark-core` (наличие единственной строки `benchmark=...` и следующей за ней `Benchmark finished.`).
+* **Детерминированность**: сбор метаданных хоста (ОС, logical CPU count, scheduler affinity) и сохранение всех параметров генерации (seed, warmup, data count) для 100% воспроизводимости.
 
-```text
-benchmark=<stable-name>_st|mt ...
-Benchmark finished.
-```
+## Manifest и JSON Artifact
 
-Первая строка содержит workload metadata, seed, warmup, data count, fingerprint, checksum, elapsed seconds и nanoseconds per call. Вторая обязана следовать после первой и является единым маркером успешного завершения для внешней автоматизации.
+На вход утилите подается versioned JSON-манифест (`schema_version: 1`), содержащий массив `profiles`. Каждый профиль определяет уникальный `id` и параметры для адаптера: `input_kind`, `operation_kind`, `measure_mode`, `size_profile` и `capacity_profile`.
 
-## Adapter API
+Результатом работы является единый атомарный JSON-артефакт. Он включает в себя:
+1. Метаданные окружения (`host`) и конфигурацию запуска (`configuration`).
+2. Исходные профили (`profiles`).
+3. Массив результатов (`samples`). При успешном выполнении сэмпл содержит `elapsed_seconds` и `ns_per_call`. При падении процесса или нарушении протокола сохраняется `returncode`, захваченный `stdout` и диагностика в `protocol_error`.
 
-Клиент передаёт `benchmark_adapter_t` из `include/benchmark_core.h`. Он определяет размер одного state record, callbacks `initialize`, `operation`, `checksum`, имя benchmark и код успеха. Workload поля `input_kind`, `operation_kind`, `size_profile` и `capacity_profile` передаются adapter-у без предметной интерпретации.
+## CLI
 
-## CLI и ENV
+Утилита требует обязательного указания путей к файлам: `--manifest`, `--output`, `--st-binary` и `--mt-binary`.
 
-ST runner поддерживает `--iterations`, а MT runner — `--threads` и `--total-iterations`; последнее значение обязано делиться на число threads. Оба поддерживают `--data-mode`, `--input-kind`, `--operation-kind`, `--measure-mode`, `--size-profile`, `--capacity-profile`, `--warmup`, `--data-count` и `--seed`. ENV equivalents используют префикс `BENCH_`: например, `BENCH_ITERATIONS`, `BENCH_MT_TOTAL_ITERATIONS`, `BENCH_OPERATION_KIND` и `BENCH_SIZE_PROFILE`.
+Поддерживаются следующие параметры конфигурации (с детерминированными значениями по умолчанию):
+* `--repetitions` — количество независимых запусков для каждого профиля и режима (ST/MT).
+* `--iterations` — количество итераций для ST-режима.
+* `--mt-total-iterations` — общее количество итераций для MT-режима (обязано делиться на число потоков без остатка).
+* `--threads` — количество MT worker-ов.
+* `--warmup`, `--data-count`, `--seed` — параметры генерации данных и прогрева, пробрасываемые в дочерние процессы.
+* `--timeout-seconds` — ограничение времени выполнения одного дочернего процесса.
 
 ## Проверка
 
@@ -32,4 +41,4 @@ make test_sanitize
 make clean && make test_helgrind
 ```
 
-Smoke-тест использует byte-buffer adapter и проверяет ST, MT, `kernel-only`, mixed inputs, operation kinds и near-capacity metadata. `test_sanitize` запускает AddressSanitizer и UndefinedBehaviorSanitizer; `test_helgrind` проверяет MT lifecycle на data races.
+Тесты проверяют корректность парсинга JSON-манифестов, обработку ошибок CLI, перехват вывода дочерних процессов, срабатывание таймаутов и формирование итогового JSON-артефакта. `test_sanitize` запускает проверки AddressSanitizer и UndefinedBehaviorSanitizer.
