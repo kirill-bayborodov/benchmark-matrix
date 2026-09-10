@@ -1,38 +1,60 @@
 # benchmark-matrix
 
-`benchmark-matrix` — C11-executor для запуска declared benchmark-матрицы и записи raw JSON артефактов. Репозиторий является модулем библиотеки `benchmark-framework` и отвечает за оркестрацию, изоляцию процессов и сбор метрик.
+![Language](https://img.shields.io/badge/language-C11-blue.svg)
+![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)
 
-## Гарантии executor-а
+`benchmark-matrix` is a C11 executor designed to run declared benchmark matrices and generate raw JSON artifacts. As a core module of the `benchmark-framework` library, it handles orchestration, process isolation, and metric collection.
 
-Утилита обеспечивает изолированный запуск каждого workload-профиля. Каждый прогон (ST и MT) выполняется в чистом дочернем процессе (через `fork` и `exec`), что полностью исключает влияние разделяемого состояния между итерациями. 
+## Features & Guarantees
 
-Ядро матрицы гарантирует:
-* **Изоляцию и безопасность**: перехват `stdout`/`stderr` (до 1 МБ на процесс) и защиту от зависаний через wall-clock timeout с принудительным завершением (`SIGKILL`).
-* **Валидацию протокола**: строгую проверку маркеров завершения `benchmark-core` (наличие единственной строки `benchmark=...` и следующей за ней `Benchmark finished.`).
-* **Детерминированность**: сбор метаданных хоста (ОС, logical CPU count, scheduler affinity) и сохранение всех параметров генерации (seed, warmup, data count) для 100% воспроизводимости.
+The utility ensures that every workload profile is executed in strict isolation. Each run (both Single-Threaded and Multi-Threaded) is spawned in a clean child process (via `fork` and `exec`), completely eliminating shared state interference between iterations.
 
-## Manifest и JSON Artifact
+The matrix core guarantees:
+* **Isolation and Safety**: Captures `stdout`/`stderr` (up to 1 MB per process) and prevents process hangs using a wall-clock timeout with forced termination (`SIGKILL`).
+* **Protocol Validation**: Strictly enforces `benchmark-core` completion markers. It requires exactly one `benchmark=...` line followed immediately by a `Benchmark finished.` line.
+* **Determinism**: Collects host metadata (OS, logical CPU count, scheduler affinity) and preserves all data generation parameters (seed, warmup, data count) to ensure 100% reproducible runs.
 
-На вход утилите подается versioned JSON-манифест (`schema_version: 1`), содержащий массив `profiles`. Каждый профиль определяет уникальный `id` и параметры для адаптера: `input_kind`, `operation_kind`, `measure_mode`, `size_profile` и `capacity_profile`.
+## Manifest and JSON Artifact
 
-Результатом работы является единый атомарный JSON-артефакт. Он включает в себя:
-1. Метаданные окружения (`host`) и конфигурацию запуска (`configuration`).
-2. Исходные профили (`profiles`).
-3. Массив результатов (`samples`). При успешном выполнении сэмпл содержит `elapsed_seconds` и `ns_per_call`. При падении процесса или нарушении протокола сохраняется `returncode`, захваченный `stdout` и диагностика в `protocol_error`.
+### Input
+The utility accepts a versioned JSON manifest (`schema_version: 1`) containing an array of `profiles`. Each profile defines a unique `id` and specific parameters for the adapter: `input_kind`, `operation_kind`, `measure_mode`, `size_profile`, and `capacity_profile`.
 
-## CLI
+### Output
+The result is a single, atomic JSON artifact that includes:
+1. **Environment & Config**: Host metadata (`host`) and execution parameters (`configuration`).
+2. **Profiles**: The original input workload dimensions (`profiles`).
+3. **Samples**: An array of execution results (`samples`). 
+   - *Success*: Contains `elapsed_seconds` and `ns_per_call`.
+   - *Failure*: If a process crashes or violates the protocol, the sample retains the `returncode`, captured `stdout`, and diagnostics in a `protocol_error` field.
 
-Утилита требует обязательного указания путей к файлам: `--manifest`, `--output`, `--st-binary` и `--mt-binary`.
+## Command-Line Interface (CLI)
 
-Поддерживаются следующие параметры конфигурации (с детерминированными значениями по умолчанию):
-* `--repetitions` — количество независимых запусков для каждого профиля и режима (ST/MT).
-* `--iterations` — количество итераций для ST-режима.
-* `--mt-total-iterations` — общее количество итераций для MT-режима (обязано делиться на число потоков без остатка).
-* `--threads` — количество MT worker-ов.
-* `--warmup`, `--data-count`, `--seed` — параметры генерации данных и прогрева, пробрасываемые в дочерние процессы.
-* `--timeout-seconds` — ограничение времени выполнения одного дочернего процесса.
+The utility requires explicit file paths for its core operations:
+`--manifest <FILE>`, `--output <FILE>`, `--st-binary <FILE>`, and `--mt-binary <FILE>`.
 
-## Проверка
+It also supports the following configuration parameters (all of which have deterministic defaults):
+* `--repetitions` — Number of independent runs for each profile and mode (ST/MT).
+* `--iterations` — Number of iterations for ST mode.
+* `--mt-total-iterations` — Total number of iterations for MT mode (must be evenly divisible by the number of threads).
+* `--threads` — Number of MT workers.
+* `--warmup`, `--data-count`, `--seed` — Data generation and warm-up parameters forwarded to the child processes.
+* `--timeout-seconds` — Wall-clock time limit for a single child process.
+
+### Example Usage
+
+```bash
+./bench_matrix \
+  --manifest profiles.json \
+  --output results.json \
+  --st-binary ./my_bench_st \
+  --mt-binary ./my_bench_mt \
+  --threads 4 \
+  --repetitions 5
+```
+
+## Testing & Validation
+
+To ensure reliability and memory safety, the project includes a comprehensive test suite.
 
 ```bash
 make test
@@ -41,4 +63,10 @@ make test_sanitize
 make clean && make test_helgrind
 ```
 
-Тесты проверяют корректность парсинга JSON-манифестов, обработку ошибок CLI, перехват вывода дочерних процессов, срабатывание таймаутов и формирование итогового JSON-артефакта. `test_sanitize` запускает проверки AddressSanitizer и UndefinedBehaviorSanitizer.
+* **`make test`**: Verifies JSON manifest parsing, CLI error handling, child process output capture, timeout triggers, and the final JSON artifact formatting.
+* **`make test_sanitize`**: Runs the suite with AddressSanitizer (ASan) and UndefinedBehaviorSanitizer (UBSan).
+* **`make test_helgrind`**: Checks the MT lifecycle for data races using Valgrind's Helgrind tool.
+
+## License
+
+This project is part of the `benchmark-framework` and is distributed under the terms of the project's primary license. See the `LICENSE` file in the root directory for more details.
