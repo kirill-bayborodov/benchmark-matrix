@@ -1,4 +1,4 @@
-name: Benchmark Core CI
+name: Benchmark Module CI
 
 on:
   push:
@@ -83,13 +83,13 @@ jobs:
         run: make lint
 
       - name: Run deterministic ST and MT tests
-        run: make test
+        run: make test CONFIG=release
 
       - name: Run AddressSanitizer and UndefinedBehaviorSanitizer
-        run: make test_sanitize
+        run: make test_sanitize SAN=address && make test_sanitize SAN=undefined
 
       - name: Run Helgrind
-        run: make clean && make test_helgrind
+        run: make clean && make test_helgrind CONFIG=release
 
       - name: Create distribution
         run: make dist
@@ -117,7 +117,7 @@ jobs:
       - name: Pack distribution
         id: dist
         run: |
-          ARCHIVE="benchmark-core-${{ github.ref_name }}.tar.gz"
+          ARCHIVE="lib-${{ github.event.repository.name }}-${{ github.ref_name }}.tar.gz"
           tar -C dist -czf "$ARCHIVE" .
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
 
@@ -127,5 +127,5 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes "benchmark-core release ${{ github.ref_name }}" \
+            --notes "Release for ${{ github.ref_name }}" \
             "${{ steps.dist.outputs.archive }}"
